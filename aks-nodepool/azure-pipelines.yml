@@ -1,0 +1,215 @@
+parameters:
+- name: folder
+  displayName: Folder
+  type: string
+  default: aks-nodepool
+- name: inspec_branch
+  displayName: Inspec Branch
+  type: string
+  default: main
+
+trigger:
+  batch: false
+  branches:
+    include:
+    - feature/*
+  paths:
+    include:
+    - aks-nodepool/*
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - group: terraform-modules
+
+resources:
+  repositories:
+  - repository: inspec
+    type: git 
+    name: Inspec-profiles
+    ref: ${{ parameters.inspec_branch }}
+
+jobs:
+- job: InfraTest
+  steps:
+
+  - checkout: inspec
+  - checkout: self
+
+  - task: TerraformInstaller@0
+    displayName: Install Terraform
+    inputs:
+      terraformVersion: latest
+
+  - task: AzureCLI@2
+    displayName: Create Resource Group, storage and container
+    inputs:
+      azureSubscription: tf-test-arm
+      scriptType: bash
+      addSpnToEnvironment: true
+      scriptLocation: inlineScript
+      inlineScript: |
+        az group create --location "eastus" --name rg-fs-tf-modules-test
+        az storage account create --name tfmodulesteststate --resource-group rg-fs-tf-modules-test --sku Standard_LRS
+        az storage container create --name tfstate --account-name tfmodulesteststate
+
+  - task: TerraformTaskV2@2
+    displayName: Terraform init
+    inputs:
+      provider: 'azurerm'
+      command: 'init'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform-modules/${{ parameters.folder }}/test'
+      backendServiceArm: tf-test-arm
+      backendAzureRmResourceGroupName: 'rg-fs-tf-modules-test'
+      backendAzureRmStorageAccountName: 'tfmodulesteststate'
+      backendAzureRmContainerName: 'tfstate'
+      backendAzureRmKey: ${{ parameters.folder }}.tfstate
+
+  - task: TerraformTaskV2@2
+    displayName: Terraform validate
+    inputs:
+      provider: 'azurerm'
+      command: 'validate'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform-modules/${{ parameters.folder }}/test'
+
+  - task: TerraformTaskV2@2
+    displayName: Terraform plan
+    inputs:
+      provider: 'azurerm'
+      command: 'plan'
+      # publishPlanResults: 'tfplan'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform-modules/${{ parameters.folder }}/test'
+      environmentServiceNameAzureRM: tf-test-arm
+      commandOptions: '-out tfplan'
+
+  - task: AzureCLI@2
+    displayName: Checkov
+    continueOnError: true
+    inputs:
+      azureSubscription: tf-test-arm
+      scriptType: bash
+      addSpnToEnvironment: true
+      scriptLocation: inlineScript
+      failOnStandardError: false
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform-modules/${{ parameters.folder }}/test'
+      inlineScript: |
+        export AZURE_CLIENT_SECRET=$servicePrincipalKey
+        # export AZURE_SUBSCRIPTION_ID=$subscriptionId
+        export AZURE_CLIENT_ID=$servicePrincipalId
+        export AZURE_TENANT_ID=$tenantId
+        pip3 install checkov jq
+        terraform show -json tfplan > tfplan.json
+        jq . tfplan.json > tf.json
+        rm tfplan.json
+        checkov -f tf.json --repo-root-for-plan-enrichment . 
+        exit 0
+
+  - task: TerraformTaskV2@2
+    displayName: Terraform apply
+    inputs:
+      provider: 'azurerm'
+      command: 'apply'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform-modules/${{ parameters.folder }}/test'
+      environmentServiceNameAzureRM: tf-test-arm
+      commandOptions: 'tfplan'
+
+  - task: TerraformTaskV2@2
+    displayName: Terraform plan 2
+    inputs:
+      provider: 'azurerm'
+      command: 'plan'
+      publishPlanResults: 'tfplan'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform-modules/${{ parameters.folder }}/test'
+      environmentServiceNameAzureRM: tf-test-arm
+      commandOptions: '-out tfplan'
+
+  - task: AzureCLI@2
+    displayName: Checkov 2
+    continueOnError: true
+    inputs:
+      azureSubscription: tf-test-arm
+      scriptType: bash
+      addSpnToEnvironment: true
+      scriptLocation: inlineScript
+      failOnStandardError: false
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform-modules/${{ parameters.folder }}/test'
+      inlineScript: |
+        export AZURE_CLIENT_SECRET=$servicePrincipalKey
+        # export AZURE_SUBSCRIPTION_ID=$subscriptionId
+        export AZURE_CLIENT_ID=$servicePrincipalId
+        export AZURE_TENANT_ID=$tenantId
+        pip3 install checkov jq
+        terraform show -json tfplan > tfplan.json
+        jq . tfplan.json > tf.json
+        rm tfplan.json
+        checkov -f tf.json --repo-root-for-plan-enrichment . 
+        exit 0
+
+  - task: AzureCLI@2
+    displayName: Generate Inspec input file
+    continueOnError: true
+    inputs:
+      azureSubscription: tf-test-arm
+      scriptType: bash
+      addSpnToEnvironment: true
+      scriptLocation: inlineScript
+      failOnStandardError: false
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform-modules/${{ parameters.folder }}/test'
+      inlineScript: |
+        # export ARM_CLIENT_SECRET=$servicePrincipalKey
+        # # export AZURE_SUBSCRIPTION_ID=$subscriptionId
+        # export ARM_CLIENT_ID=$servicePrincipalId
+        # export ARM_TENANT_ID=$tenantId
+        sudo apt-get --yes install jq
+        sudo snap install yq
+        terraform output --json > output.json
+        cat output.json
+        yq --version
+        yq 'with_entries(.value |= .value)' -P output.json -oy > output.yaml
+        cat output.yaml
+  
+  - task: AzureCLI@2
+    displayName: Run Inspec
+    name: inspecstep
+    continueOnError: true
+    inputs:
+      azureSubscription: tf-test-arm
+      scriptType: bash
+      addSpnToEnvironment: true
+      scriptLocation: inlineScript
+      failOnStandardError: false
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform-modules/${{ parameters.folder }}/test'
+      inlineScript: |
+        export AZURE_CLIENT_SECRET=$servicePrincipalKey
+        export AZURE_SUBSCRIPTION_ID=$(az account list --query "[?isDefault].id | [0]" --output tsv)
+        export AZURE_CLIENT_ID=$servicePrincipalId
+        export AZURE_TENANT_ID=$tenantId
+        curl https://omnitruck.chef.io/install.sh | sudo bash -s -- -P inspec
+        inspec exec $(Build.SourcesDirectory)/Inspec-profiles/${{ parameters.folder }} -t azure:// --input-file output.yaml --chef-license=accept-silent --no-color
+        echo "##vso[task.setvariable variable=INSPEC_RESULT;isOutput=true]$?"
+
+  - task: TerraformTaskV2@2
+    displayName: Terraform destroy
+    inputs:
+      provider: 'azurerm'
+      command: 'destroy'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform-modules/${{ parameters.folder }}/test'
+      environmentServiceNameAzureRM: tf-test-arm
+
+  - task: Bash@3
+    displayName: Check Inspec Result
+    inputs:
+      targetType: 'inline'
+      failOnStderr: true
+      script: |
+        if [[ $(inspecstep.INSPEC_RESULT) -eq 101 || $(inspecstep.INSPEC_RESULT) -eq 0 ]];
+        then
+          echo "Successful pipeline"
+        else
+          echo "Tests did not pass"  1>&2
+        fi
+
+  uses:
+    repositories: # List of referenced repositories
+    - inspec # Repository reference to Inspec-profiles
