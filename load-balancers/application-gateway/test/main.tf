@@ -129,7 +129,7 @@ module "key-vault" {
 
 
 module "self-certs" {
-    source              = "../../../key-vault-certs"
+    source              = "../../key-vault-certs"
     
     key_vault_id        = module.key-vault.kv_id
     key_vault_name      = module.key-vault.kv_name
@@ -141,7 +141,7 @@ module "self-certs" {
 }
 
 module "application-gateway" {
-    source                      = "../../../load-balancers/application-gateway"   
+    source                      = "../../load-balancers/application-gateway"   
     
    
     resource_group_name         = azurerm_resource_group.testrg.name
