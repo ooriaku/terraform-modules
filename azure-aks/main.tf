@@ -66,7 +66,7 @@ resource "azurerm_kubernetes_cluster" "aks-cluster" {
 		
 		pod_subnet_id           = var.pod_subnet_id != null ? var.pod_subnet_id : null
 		zones					= var.default_node_pool.zones
-		enable_auto_scaling   	= var.default_node_pool.cluster_auto_scaling
+		#enable_auto_scaling   	= var.default_node_pool.cluster_auto_scaling
 		max_count               = var.default_node_pool.cluster_auto_scaling == true ? var.default_node_pool.cluster_auto_scaling_max_count : null	#4
     	min_count               = var.default_node_pool.cluster_auto_scaling == true ? var.default_node_pool.cluster_auto_scaling_min_count : null	#2
 		max_pods                = var.default_node_pool.max_pods   #250
@@ -140,7 +140,7 @@ resource "azurerm_kubernetes_cluster" "aks-cluster" {
 		}
 	}
 	azure_active_directory_role_based_access_control {
-		managed 				= var.azure_rbac_enabled
+		#managed 				= var.azure_rbac_enabled
 		azure_rbac_enabled     	= var.azure_rbac_enabled
 		admin_group_object_ids 	= var.azure_rbac_enabled == true ? var.cluster_admin_ids : []
 		tenant_id              	= var.azure_rbac_enabled == true ? data.azurerm_client_config.current.tenant_id : null
@@ -177,7 +177,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "aks-cluster" {
 		vnet_subnet_id        = var.vnet_subnet_id
 		node_taints           = each.value.taints		
 		
-		enable_auto_scaling   = each.value.cluster_auto_scaling
+		#enable_auto_scaling   = each.value.cluster_auto_scaling
 		max_count             = each.value.cluster_auto_scaling == true ? each.value.cluster_auto_scaling_max_count : null	#4
     	min_count             = each.value.cluster_auto_scaling == true ? each.value.cluster_auto_scaling_min_count : null	#2
 		tags                  = var.tags
