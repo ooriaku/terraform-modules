@@ -4,6 +4,7 @@
     firewall_policy_id = azurerm_firewall_policy.azfw-policy.id
     priority           = var.policy_priority
     
+    
     dynamic "network_rule_collection" {
         for_each = var.network_rule_collections != null ? var.network_rule_collections : []
         content {
