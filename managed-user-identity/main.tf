@@ -1,7 +1,7 @@
 ﻿# Get the current Subscription
 data "azurerm_subscription" "current" {}
 
-resource "azurerm_user_assigned_identity" "mi" {
+resource "azurerm_user_assigned_identity" "msi" {
   location            = var.location
   resource_group_name = var.resource_group_name 
   name                = var.managed_identity_name
