@@ -1,6 +1,17 @@
-﻿variable "route_table_name" {
-  type        = string
-  description = "The name of the resource group in which to create the virtual network peering."
+﻿variable "route_tables" {
+  description = "Map of route tables and their route sets"
+  type = map(object({
+    name      = string
+    subnet_id = string
+
+    routes = map(object({
+      address_prefix         = string
+      next_hop_type          = string           # VirtualAppliance, VnetLocal, Internet, None
+      next_hop_in_ip_address = optional(string) # Required when next_hop_type = VirtualAppliance
+    }))
+
+    disable_bgp_route_propagation = optional(bool, false)
+  }))
 }
 
 variable "location" {

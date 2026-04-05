@@ -17,6 +17,8 @@ resource "azurerm_kubernetes_cluster_node_pool" "spot" {
   enable_auto_scaling    = each.value.enable_auto_scaling
   enable_host_encryption = each.value.enable_host_encryption
   enable_node_public_ip  = each.value.enable_node_public_ip
+
+  
   eviction_policy        = each.value.eviction_policy
   max_pods               = each.value.max_pods
   mode                   = each.value.mode
